@@ -94,6 +94,80 @@ Sau khi tích hợp, bạn có thể hỏi Claude:
 - Không hỗ trợ INSERT, UPDATE, DELETE, DROP,...
 - Khuyến nghị tạo user SQL Server riêng với quyền read-only
 
+### Tạo user SQL Server với quyền read-only
+
+Chạy các lệnh SQL sau trong SQL Server Management Studio (SSMS) với quyền admin:
+
+```sql
+-- 1. Tạo Login ở cấp Server
+CREATE LOGIN claude WITH PASSWORD = 'your_secure_password';
+
+-- 2. Cấp quyền xem tất cả databases
+GRANT VIEW ANY DATABASE TO claude;
+
+-- 3. Tạo User và cấp quyền đọc cho từng database
+-- Thay 'YourDatabase' bằng tên database thực tế
+-- Lặp lại cho mỗi database bạn muốn cho phép truy cập
+
+USE [YourDatabase];
+GO
+CREATE USER claude FOR LOGIN claude;
+GO
+-- Cấp quyền đọc tất cả tables
+ALTER ROLE db_datareader ADD MEMBER claude;
+GO
+-- Cấp quyền xem definition (để xem cấu trúc tables, views, stored procedures)
+GRANT VIEW DEFINITION TO claude;
+GO
+```
+
+**Script tự động cấp quyền cho TẤT CẢ databases:**
+
+```sql
+-- Chạy script này để tạo user và cấp quyền đọc cho tất cả databases
+DECLARE @dbname NVARCHAR(128);
+DECLARE @sql NVARCHAR(MAX);
+
+DECLARE db_cursor CURSOR FOR
+SELECT name FROM sys.databases
+WHERE state = 0  -- Online databases only
+  AND name NOT IN ('tempdb')  -- Bỏ qua tempdb
+  AND database_id > 4;  -- Bỏ qua system databases (master, model, msdb, tempdb)
+
+OPEN db_cursor;
+FETCH NEXT FROM db_cursor INTO @dbname;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @sql = '
+    USE [' + @dbname + '];
+    IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = ''claude'')
+    BEGIN
+        CREATE USER claude FOR LOGIN claude;
+    END
+    ALTER ROLE db_datareader ADD MEMBER claude;
+    GRANT VIEW DEFINITION TO claude;
+    ';
+    
+    BEGIN TRY
+        EXEC sp_executesql @sql;
+        PRINT 'Granted access to: ' + @dbname;
+    END TRY
+    BEGIN CATCH
+        PRINT 'Error on database: ' + @dbname + ' - ' + ERROR_MESSAGE();
+    END CATCH
+    
+    FETCH NEXT FROM db_cursor INTO @dbname;
+END
+
+CLOSE db_cursor;
+DEALLOCATE db_cursor;
+
+PRINT 'Done! User claude has read access to all user databases.';
+```
+
+> 💡 **Tip**: Thay `claude` và `your_secure_password` bằng username/password bạn muốn sử dụng, sau đó cập nhật trong file `sql_mcp.py`.
+
 ## 📁 Cấu trúc project
 
 ```
