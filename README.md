@@ -30,19 +30,17 @@ cd mcp-tool
 uv sync
 ```
 
-### 3. Cấu hình kết nối SQL Server
+### 3. Cấu hình biến môi trường
 
-Mở file `sql_mcp.py` và chỉnh sửa thông tin kết nối:
+Kết nối SQL Server được cấu hình qua biến môi trường:
 
-```python
-BASE_CONN = (
-    "DRIVER={ODBC Driver 17 for SQL Server};"
-    "SERVER=YOUR_SERVER_NAME;"      # Tên server của bạn
-    "UID=YOUR_USERNAME;"            # Username
-    "PWD=YOUR_PASSWORD;"            # Password
-    "TrustServerCertificate=yes;"
-)
-```
+| Biến | Mô tả | Mặc định |
+|------|-------|----------|
+| `SQL_SERVER` | Tên server SQL | `localhost` |
+| `SQL_USER` | Username | `sa` |
+| `SQL_PASSWORD` | Password | (trống) |
+
+Có thể cấu hình trực tiếp trong `claude_desktop_config.json` (xem bước tiếp theo).
 
 ## 🔧 Tích hợp với Claude Desktop
 
@@ -65,13 +63,20 @@ Thêm nội dung sau vào file `claude_desktop_config.json`:
         "D:/Dev/project/mcp-tool",
         "run",
         "sql_mcp.py"
-      ]
+      ],
+      "env": {
+        "SQL_SERVER": "GIGABYTE",
+        "SQL_USER": "AI_READER",
+        "SQL_PASSWORD": "mcp@ngtuonghy"
+      }
     }
   }
 }
 ```
 
-> ⚠️ **Lưu ý**: Thay đổi đường dẫn `D:/Dev/project/mcp-tool` thành đường dẫn thực tế trên máy của bạn.
+> ⚠️ **Lưu ý**: 
+> - Thay đổi đường dẫn `D:/Dev/project/mcp-tool` thành đường dẫn thực tế trên máy của bạn.
+> - Cập nhật `SQL_SERVER`, `SQL_USER`, `SQL_PASSWORD` với thông tin kết nối của bạn.
 
 ### Bước 3: Khởi động lại Claude Desktop
 
@@ -100,10 +105,10 @@ Chạy các lệnh SQL sau trong SQL Server Management Studio (SSMS) với quy�
 
 ```sql
 -- 1. Tạo Login ở cấp Server
-CREATE LOGIN claude WITH PASSWORD = 'your_secure_password';
+CREATE LOGIN AI_READER WITH PASSWORD = 'your_secure_password';
 
 -- 2. Cấp quyền xem tất cả databases
-GRANT VIEW ANY DATABASE TO claude;
+GRANT VIEW ANY DATABASE TO AI_READER;
 
 -- 3. Tạo User và cấp quyền đọc cho từng database
 -- Thay 'YourDatabase' bằng tên database thực tế
@@ -111,20 +116,44 @@ GRANT VIEW ANY DATABASE TO claude;
 
 USE [YourDatabase];
 GO
-CREATE USER claude FOR LOGIN claude;
+CREATE USER AI_READER FOR LOGIN AI_READER;
 GO
 -- Cấp quyền đọc tất cả tables
-ALTER ROLE db_datareader ADD MEMBER claude;
+ALTER ROLE db_datareader ADD MEMBER AI_READER;
 GO
 -- Cấp quyền xem definition (để xem cấu trúc tables, views, stored procedures)
-GRANT VIEW DEFINITION TO claude;
+GRANT VIEW DEFINITION TO AI_READER;
 GO
 ```
 
 **Script tự động cấp quyền cho TẤT CẢ databases:**
 
 ```sql
--- Chạy script này để tạo user và cấp quyền đọc cho tất cả databases
+-- =============================================
+-- QUAN TRỌNG: Chạy script này trong database master
+-- =============================================
+USE master;
+GO
+
+-- =============================================
+-- BƯỚC 1: Tạo Login (chạy 1 lần duy nhất)
+-- =============================================
+IF NOT EXISTS (SELECT * FROM sys.server_principals WHERE name = 'AI_READER')
+BEGIN
+    CREATE LOGIN AI_READER WITH PASSWORD = 'mcp@ngtuonghy';
+    PRINT 'Login AI_READER created successfully.';
+END
+ELSE
+    PRINT 'Login AI_READER already exists.';
+GO
+
+-- Cấp quyền xem tất cả databases
+GRANT VIEW ANY DATABASE TO AI_READER;
+GO
+
+-- =============================================
+-- BƯỚC 2: Cấp quyền đọc cho tất cả databases
+-- =============================================
 DECLARE @dbname NVARCHAR(128);
 DECLARE @sql NVARCHAR(MAX);
 
@@ -141,12 +170,12 @@ WHILE @@FETCH_STATUS = 0
 BEGIN
     SET @sql = '
     USE [' + @dbname + '];
-    IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = ''claude'')
+    IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = ''AI_READER'')
     BEGIN
-        CREATE USER claude FOR LOGIN claude;
+        CREATE USER AI_READER FOR LOGIN AI_READER;
     END
-    ALTER ROLE db_datareader ADD MEMBER claude;
-    GRANT VIEW DEFINITION TO claude;
+    ALTER ROLE db_datareader ADD MEMBER AI_READER;
+    GRANT VIEW DEFINITION TO AI_READER;
     ';
     
     BEGIN TRY
@@ -163,10 +192,10 @@ END
 CLOSE db_cursor;
 DEALLOCATE db_cursor;
 
-PRINT 'Done! User claude has read access to all user databases.';
+PRINT 'Done! User AI_READER has read access to all user databases.';
 ```
 
-> 💡 **Tip**: Thay `claude` và `your_secure_password` bằng username/password bạn muốn sử dụng, sau đó cập nhật trong file `sql_mcp.py`.
+> 💡 **Tip**: Thay `AI_READER` và `your_secure_password` bằng username/password bạn muốn sử dụng, sau đó cập nhật trong file `sql_mcp.py`.
 
 ## 📁 Cấu trúc project
 

@@ -1,3 +1,4 @@
+import os
 import pyodbc
 from mcp.server.fastmcp import FastMCP
 
@@ -8,9 +9,9 @@ mcp = FastMCP("sqlserver")
 # ===============================
 BASE_CONN = (
     "DRIVER={ODBC Driver 17 for SQL Server};"
-    "SERVER=GIGABYTE;"
-    "UID=claude;"
-    "PWD=mcp@ngtuonghy;"
+    f"SERVER={os.getenv('SQL_SERVER', 'GIGABYTE')};"
+    f"UID={os.getenv('SQL_USER', 'AI_READER')};"
+    f"PWD={os.getenv('SQL_PASSWORD', 'mcp@ngtuonghy')};"
     "TrustServerCertificate=yes;"
 )
 
